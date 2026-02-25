@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>The T Live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+:root{
+  --accent:#00C957;--gd:#004d24;
+  --bg:#080c09;--surf:#0f1610;--bdr:#1a261b;
+  --txt:#c8e6cb;--mut:#4a6b4d;--wh:#f0f7f1;
+  --panel-w:274px;--hdr:52px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:'DM Mono',monospace;}
+
+/* ══ HEADER ══ */
+header{position:fixed;top:0;left:0;right:0;height:var(--hdr);display:flex;align-items:center;justify-content:space-between;padding:0 14px;border-bottom:1px solid var(--bdr);background:var(--surf);z-index:1100;gap:10px;}
+.logo{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+.logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#006B30,#00C957);border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:12px;color:#fff;letter-spacing:-.5px;}
+h1{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:var(--wh);white-space:nowrap;}
+h1 .t{color:#00C957;}
+.status-bar{display:flex;align-items:center;gap:8px;font-size:10px;color:var(--mut);flex-shrink:0;}
+.pulse-dot{width:6px;height:6px;background:var(--accent);border-radius:50%;animation:hb 2s infinite;flex-shrink:0;}
+@keyframes hb{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
+.train-count{color:var(--accent);font-weight:500;}
+.hdr-btn{width:34px;height:34px;border-radius:7px;border:1px solid var(--bdr);background:#0d1a10;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:15px;color:var(--mut);transition:background .2s,color .2s,border-color .2s;}
+.hdr-btn:hover,.hdr-btn.active{background:var(--gd);border-color:#00843D;color:var(--accent);}
+
+/* ══ MAP ══ */
+#map{position:fixed;top:var(--hdr);left:0;right:0;bottom:0;}
+.leaflet-container{background:#080c09!important;}
+.leaflet-tile-pane{filter:brightness(.42) saturate(.22) hue-rotate(100deg);}
+
+/* ══ TRAIN MARKERS ══ */
+.train-wrap{position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.train-circle{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:6px;color:#fff;font-weight:700;font-family:'Syne',sans-serif;border-width:2.5px;border-style:solid;}
+.train-arrow{position:absolute;top:0;left:50%;margin-left:-4px;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:9px solid white;opacity:.8;}
+@keyframes ring-yellow{0%,100%{box-shadow:0 0 0 2px #FFD700,0 0 10px #FFD70088;}50%{box-shadow:0 0 0 4px #FFD700,0 0 18px #FFD700cc;}}
+@keyframes ring-red   {0%,100%{box-shadow:0 0 0 2px #FF2222,0 0 10px #FF222288;}50%{box-shadow:0 0 0 5px #FF2222,0 0 22px #FF2222cc;}}
+.alert-yellow .train-circle{border-color:#FFD700!important;animation:ring-yellow 1.2s ease-in-out infinite;}
+.alert-red    .train-circle{border-color:#FF2222!important;animation:ring-red 0.8s ease-in-out infinite;}
+
+/* ══ STOP DOTS ══ */
+.stop-dot{width:8px;height:8px;border-radius:50%;border:1.5px solid rgba(255,255,255,.2);cursor:pointer;transition:transform .15s;}
+.stop-dot:hover,.stop-dot:active{transform:scale(2);border-color:#fff;}
+.stop-dot.watched{border-color:#fff!important;box-shadow:0 0 0 3px #FFD700,0 0 10px #FFD70099;transform:scale(1.6);}
+
+/* ══ TOOLTIPS ══ */
+.stop-tooltip{background:var(--surf)!important;border:1px solid var(--bdr)!important;border-radius:10px!important;color:var(--txt)!important;font-family:'DM Mono',monospace!important;font-size:11px!important;padding:10px 13px!important;box-shadow:0 8px 28px rgba(0,0,0,.7)!important;min-width:195px;pointer-events:none!important;}
+.stop-tooltip::before{display:none!important;}
+.leaflet-tooltip{white-space:normal!important;}
+.tt-name{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--wh);margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--bdr);}
+.tt-dir{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin:6px 0 2px;}
+.tt-row{display:flex;align-items:center;gap:6px;margin:3px 0;}
+.tt-time{color:var(--accent);font-weight:500;min-width:42px;font-size:11px;}
+.tt-time.soon{color:#ffcc44;}.tt-time.now{color:#ff6b6b;}
+.tt-badge{padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;border:1px solid;}
+.tt-none{color:var(--mut);font-size:10px;font-style:italic;}
+.tt-load{color:var(--mut);font-size:10px;}
+
+/* ══ TRAIN POPUP ══ */
+.leaflet-popup-content-wrapper{background:var(--surf)!important;border:1px solid var(--bdr)!important;border-radius:8px!important;box-shadow:0 8px 32px rgba(0,0,0,.6)!important;color:var(--txt)!important;font-family:'DM Mono',monospace!important;font-size:12px!important;}
+.leaflet-popup-tip{background:var(--surf)!important;}
+.popup-title{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent);margin-bottom:7px;}
+.popup-row{display:flex;justify-content:space-between;gap:14px;margin:3px 0;color:var(--mut);}
+.popup-row span:last-child{color:var(--txt);}
+.dir-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;background:#0d1a10;border:1px solid #1e3020;color:#88ffaa;}
+.b-pill{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid;}
+
+/* ══ PANEL ══ */
+.panel{position:fixed;top:var(--hdr);right:0;width:var(--panel-w);bottom:0;background:var(--surf);border-left:1px solid var(--bdr);z-index:1000;display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.4,0,.2,1);overflow:hidden;}
+.panel.hidden{transform:translateX(100%);}
+@media(max-width:600px){
+  :root{--panel-w:100%;}
+  .panel{top:auto;right:0;left:0;bottom:0;border-left:none;border-top:1px solid var(--bdr);border-radius:16px 16px 0 0;height:72vh;min-height:200px;transform:translateY(0);}
+  .panel.hidden{transform:translateY(100%);}
+  .mobile-close-btn{display:flex!important;}
+}
+.panel-drag{display:none;width:34px;height:4px;border-radius:2px;background:var(--bdr);margin:10px auto 3px;flex-shrink:0;}
+@media(max-width:600px){.panel-drag{display:block;}}
+.panel-scroll{flex:1;overflow-y:auto;padding:0 13px 12px;}
+.panel-scroll::-webkit-scrollbar{width:3px;}
+.panel-scroll::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px;}
+.panel-footer{flex-shrink:0;padding:9px 13px;border-top:1px solid var(--bdr);display:flex;align-items:center;gap:8px;}
+.refresh-btn{flex:1;padding:7px;background:transparent;border:1px solid var(--bdr);border-radius:6px;color:var(--mut);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .2s;}
+.refresh-btn:hover{border-color:#00843D;color:var(--accent);}
+.last-updated{font-size:9px;color:var(--mut);}
+/* Mobile-only close button in footer */
+.mobile-close-btn{display:none;padding:7px 14px;background:#1a0a0a;border:1px solid #3a1010;border-radius:6px;color:#ff8080;font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.mobile-close-btn:hover{background:#2a1010;border-color:#ff4444;}
+
+/* ══ SECTION ══ */
+.sec{border-bottom:1px solid var(--bdr);}
+.sec:last-child{border-bottom:none;}
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;padding:11px 0 9px;cursor:pointer;user-select:none;}
+.sec-title{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:var(--wh);text-transform:uppercase;letter-spacing:1px;}
+.sec-chev{color:var(--mut);font-size:11px;transition:transform .2s;flex-shrink:0;}
+.sec-chev.open{transform:rotate(180deg);}
+.sec-body{display:none;}
+.sec-body.open{display:block;padding-bottom:11px;}
+
+/* ══ BRANCHES ══ */
+.branch-row{display:flex;align-items:center;justify-content:space-between;margin:6px 0;}
+.branch-left{display:flex;align-items:center;gap:9px;}
+.swatch{width:28px;height:5px;border-radius:2px;flex-shrink:0;}
+.swatch-duo{width:28px;height:5px;border-radius:2px;flex-shrink:0;display:flex;overflow:hidden;}
+.swatch-duo span{flex:1;}
+.tog{width:32px;height:17px;border-radius:9px;border:1px solid var(--bdr);background:#0a0f0b;position:relative;cursor:pointer;transition:background .2s,border-color .2s;flex-shrink:0;}
+.tog.on{background:var(--gd);border-color:#00843D;}
+.tog::after{content:'';position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--mut);transition:transform .2s,background .2s;}
+.tog.on::after{transform:translateX(15px);background:var(--accent);}
+.branch-lbl{font-size:10px;color:var(--txt);}
+.branch-lbl.off{color:var(--mut);text-decoration:line-through;}
+.branch-group-hdr{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin:10px 0 4px;padding-top:6px;border-top:1px solid var(--bdr);}
+.branch-group-hdr:first-child{border-top:none;padding-top:0;margin-top:0;}
+.leg{color:var(--mut);font-size:9px;line-height:1.8;margin-top:8px;}
+
+/* ══ ALERT SLOTS ══ */
+.alert-slots{display:flex;flex-direction:column;gap:7px;}
+.alert-slot{border:1px solid var(--bdr);border-radius:7px;overflow:hidden;background:#0a0f0b;}
+.slot-hdr{display:flex;align-items:center;padding:7px 9px;cursor:pointer;background:#0f1610;user-select:none;transition:background .15s;gap:5px;}
+.slot-hdr:hover{background:#142016;}
+.slot-badge{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.slot-num{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;color:var(--mut);}
+.slot-lbl{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;color:var(--wh);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.slot-lbl.empty{color:var(--mut);font-weight:400;}
+.slot-chev{color:var(--mut);font-size:10px;transition:transform .2s;}
+.slot-chev.open{transform:rotate(180deg);}
+.slot-body{display:none;padding:9px;}
+.slot-body.open{display:block;}
+.slot-active-info{background:#1a1500;border:1px solid #3a3000;border-radius:6px;padding:7px 9px;margin-bottom:7px;}
+.slot-info-name{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:var(--wh);margin-bottom:3px;}
+.slot-info-dirs{font-size:10px;color:var(--mut);margin-bottom:5px;}
+.slot-clear{width:100%;padding:4px;background:transparent;border:1px solid #3a2020;border-radius:5px;color:#ff8080;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s;}
+.slot-clear:hover{background:#2a1010;border-color:#ff4444;}
+
+/* ══ ALERT TIMING ══ */
+.alert-timing{background:#0a0f0b;border:1px solid var(--bdr);border-radius:7px;padding:10px;margin-top:8px;}
+.at-title{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;color:var(--wh);margin-bottom:8px;}
+.at-row{display:flex;align-items:center;gap:8px;margin:5px 0;}
+.at-label{font-size:10px;min-width:52px;display:flex;align-items:center;gap:5px;}
+.at-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.at-slider{flex:1;-webkit-appearance:none;appearance:none;height:4px;border-radius:2px;outline:none;cursor:pointer;background:var(--bdr);}
+.at-slider.yellow::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#FFD700;cursor:pointer;border:2px solid #1a1500;}
+.at-slider.red::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#FF2222;cursor:pointer;border:2px solid #1a0000;}
+.at-slider.yellow::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#FFD700;cursor:pointer;border:2px solid #1a1500;}
+.at-slider.red::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#FF2222;cursor:pointer;border:2px solid #1a0000;}
+.at-val{font-size:10px;font-weight:500;min-width:34px;text-align:right;}
+.at-val.ya{color:#FFD700;}.at-val.ra{color:#FF4444;}
+.alert-leg{padding:7px 9px;border-radius:6px;background:#1a140a;border:1px solid #3a2800;font-size:10px;line-height:1.7;margin-top:8px;}
+.ya{color:#FFD700;}.ra{color:#FF4444;}
+
+/* ══ SHARED SEARCH ══ */
+.search-wrap{position:relative;margin-bottom:7px;}
+.sinput{width:100%;padding:6px 9px;background:#080c09;border:1px solid var(--bdr);border-radius:6px;color:var(--wh);font-family:'DM Mono',monospace;font-size:11px;outline:none;transition:border-color .2s;}
+.sinput:focus{border-color:#00843D;}
+.sinput::placeholder{color:var(--mut);}
+.sdrop{position:absolute;top:calc(100% + 3px);left:0;right:0;background:#080c09;border:1px solid var(--bdr);border-radius:6px;max-height:130px;overflow-y:auto;z-index:3000;display:none;box-shadow:0 8px 24px rgba(0,0,0,.8);}
+.sdrop.open{display:block;}
+.sopt{padding:6px 9px;cursor:pointer;font-size:11px;color:var(--txt);transition:background .1s;display:flex;align-items:center;gap:6px;}
+.sopt:hover,.sopt:active{background:#142016;}
+.ob{font-size:9px;padding:1px 4px;border-radius:3px;border:1px solid;font-weight:700;flex-shrink:0;}
+.dir-row{display:flex;gap:5px;margin-bottom:7px;}
+.dir-btn{flex:1;padding:5px 2px;border-radius:5px;font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;border:1px solid var(--bdr);background:#080c09;color:var(--mut);transition:all .2s;text-align:center;line-height:1.3;}
+.dir-btn.on{background:var(--gd);border-color:#00843D;color:var(--accent);}
+.set-btn{width:100%;padding:6px;background:var(--gd);border:1px solid #00843D;border-radius:6px;color:var(--accent);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s;margin-bottom:5px;}
+.set-btn:hover:not(:disabled){background:#00843D;color:#fff;}
+.set-btn:disabled{opacity:.3;cursor:default;}
+
+/* ══ STATION DETAIL ══ */
+.sd-card{background:#0a0f0b;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;margin-top:7px;}
+.sd-card-hdr{padding:9px 11px;border-bottom:1px solid var(--bdr);}
+.sd-card-name{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;color:var(--wh);}
+.sd-card-badges{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
+.sd-dir-block{padding:7px 11px;border-bottom:1px solid var(--bdr);}
+.sd-dir-block:last-of-type{border-bottom:none;}
+.sd-dir-lbl{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--mut);margin-bottom:5px;}
+.sd-pred-row{display:flex;align-items:center;gap:7px;margin:4px 0;padding:3px 0;border-bottom:1px solid #0d150d;}
+.sd-pred-row:last-child{border-bottom:none;}
+.sd-time{font-weight:500;min-width:46px;font-size:12px;color:var(--accent);}
+.sd-time.soon{color:#ffcc44;}.sd-time.now{color:#ff6b6b;}
+.sd-branch{font-size:9px;padding:2px 5px;border-radius:3px;border:1px solid;font-weight:700;}
+.sd-status{font-size:10px;color:var(--mut);}
+.sd-none{color:var(--mut);font-size:11px;font-style:italic;padding:5px 0;}
+.sd-footer{display:flex;justify-content:space-between;align-items:center;padding:6px 11px;border-top:1px solid var(--bdr);font-size:9px;color:var(--mut);}
+.sd-mini-refresh{background:transparent;border:1px solid var(--bdr);border-radius:4px;color:var(--mut);font-family:'DM Mono',monospace;font-size:10px;padding:2px 7px;cursor:pointer;transition:all .2s;}
+.sd-mini-refresh:hover{border-color:#00843D;color:var(--accent);}
+
+.error-msg{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1a0a0a;border:1px solid #5a1a1a;color:#ff8080;padding:9px 18px;border-radius:8px;font-size:11px;z-index:2000;display:none;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">T</div>
+    <h1><span class="t">The T</span> Live</h1>
+  </div>
+  <div class="status-bar">
+    <div class="pulse-dot"></div>
+    <span id="trainCount" class="train-count">—</span>
+    <span>active</span>
+  </div>
+  <div class="hdr-btn active" id="panelToggleBtn" title="Toggle panel" onclick="togglePanel()">☰</div>
+</header>
+
+<div id="map"></div>
+
+<div class="panel" id="panel">
+  <div class="panel-drag"></div>
+  <div class="panel-scroll">
+
+    <!-- LINES -->
+    <div class="sec">
+      <div class="sec-hdr" onclick="toggleSec('lines')">
+        <span class="sec-title">Lines</span>
+        <span class="sec-chev open" id="chev-lines">▾</span>
+      </div>
+      <div class="sec-body open" id="body-lines">
+        <div class="branch-group-hdr">Green Line</div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#00401A"></div><span class="branch-lbl" id="lbl-Green-B">B — Boston College</span></div><div class="tog on" id="tog-Green-B" onclick="toggleLine('Green-B')"></div></div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#006B30"></div><span class="branch-lbl" id="lbl-Green-C">C — Cleveland Circle</span></div><div class="tog on" id="tog-Green-C" onclick="toggleLine('Green-C')"></div></div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#00A550"></div><span class="branch-lbl" id="lbl-Green-D">D — Riverside</span></div><div class="tog on" id="tog-Green-D" onclick="toggleLine('Green-D')"></div></div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#5DD688"></div><span class="branch-lbl" id="lbl-Green-E">E — Heath Street</span></div><div class="tog on" id="tog-Green-E" onclick="toggleLine('Green-E')"></div></div>
+        <div class="branch-group-hdr">Red Line</div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#DA291C"></div><span class="branch-lbl" id="lbl-Red">Red Line</span></div><div class="tog on" id="tog-Red" onclick="toggleLine('Red')"></div></div>
+        <div class="branch-group-hdr">Orange Line</div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#ED8B00"></div><span class="branch-lbl" id="lbl-Orange">Orange Line</span></div><div class="tog on" id="tog-Orange" onclick="toggleLine('Orange')"></div></div>
+        <div class="branch-group-hdr">Blue Line</div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#003DA5"></div><span class="branch-lbl" id="lbl-Blue">Blue Line</span></div><div class="tog on" id="tog-Blue" onclick="toggleLine('Blue')"></div></div>
+        <div class="branch-group-hdr">Commuter Rail</div>
+        <div class="branch-row"><div class="branch-left"><div class="swatch" style="background:#80276C"></div><span class="branch-lbl" id="lbl-CR">Commuter Rail</span></div><div class="tog on" id="tog-CR" onclick="toggleLine('CR')"></div></div>
+        <div class="leg">Dark = Inbound · Light = Outbound<br>▲ Arrow = travel direction<br>Hover/tap stop for arrivals</div>
+      </div>
+    </div>
+
+    <!-- ALERT STATIONS -->
+    <div class="sec">
+      <div class="sec-hdr" onclick="toggleSec('alerts')">
+        <span class="sec-title">🔔 Alert Stations</span>
+        <span class="sec-chev open" id="chev-alerts">▾</span>
+      </div>
+      <div class="sec-body open" id="body-alerts">
+        <div class="alert-slots" id="alertSlots"></div>
+        <!-- Alert timing controls -->
+        <div class="alert-timing">
+          <div class="at-title">Alert Timing</div>
+          <div class="at-row">
+            <span class="at-label"><span class="at-dot" style="background:#FFD700"></span>Yellow</span>
+            <input type="range" class="at-slider yellow" id="sliderYellow" min="3" max="20" value="7" oninput="updateTiming()">
+            <span class="at-val ya" id="valYellow">≤ 7 min</span>
+          </div>
+          <div class="at-row">
+            <span class="at-label"><span class="at-dot" style="background:#FF2222"></span>Red</span>
+            <input type="range" class="at-slider red" id="sliderRed" min="1" max="15" value="5" oninput="updateTiming()">
+            <span class="at-val ra" id="valRed">≤ 5 min</span>
+          </div>
+        </div>
+        <div class="alert-leg">Rings appear on trains approaching<br>a watched station within threshold.</div>
+      </div>
+    </div>
+
+    <!-- STATION DETAILS -->
+    <div class="sec">
+      <div class="sec-hdr" onclick="toggleSec('station')">
+        <span class="sec-title">🚏 Station Details</span>
+        <span class="sec-chev open" id="chev-station">▾</span>
+      </div>
+      <div class="sec-body open" id="body-station">
+        <div class="search-wrap">
+          <input type="text" class="sinput" id="sdSearch" placeholder="Search any station…" autocomplete="off">
+          <div class="sdrop" id="sdDrop"></div>
+        </div>
+        <div id="sdResult"></div>
+      </div>
+    </div>
+
+  </div><!-- /panel-scroll -->
+  <div class="panel-footer">
+    <button class="refresh-btn" onclick="fetchAll()">↻ Refresh</button>
+    <span class="last-updated" id="lastUpdated">—</span>
+    <button class="mobile-close-btn" onclick="togglePanel()">✕ Close</button>
+  </div>
+</div>
+
+<div class="error-msg" id="errorMsg">Could not load data.</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// LINE CONFIG
+// ═══════════════════════════════════════════════════════════════════
+// Each entry: routeIds[], lineColor (for polylines), inbound fill, outbound fill, label, group
+const LINE_CONFIG = {
+  // Green branches: dark→light gradient B→E
+  'Green-B': { ids:['Green-B'], line:'#00401A', inbound:'#002B10', outbound:'#00803A', name:'B · Boston College',   group:'green' },
+  'Green-C': { ids:['Green-C'], line:'#006B30', inbound:'#004520', outbound:'#00A050', name:'C · Cleveland Circle', group:'green' },
+  'Green-D': { ids:['Green-D'], line:'#00A550', inbound:'#007030', outbound:'#33CC70', name:'D · Riverside',        group:'green' },
+  'Green-E': { ids:['Green-E'], line:'#5DD688', inbound:'#2A9050', outbound:'#88EEA0', name:'E · Heath Street',     group:'green' },
+  // Other subway lines
+  'Red':    { ids:['Red'],    line:'#DA291C', inbound:'#9B1D14', outbound:'#FF5549', name:'Red Line',    group:'red' },
+  'Orange': { ids:['Orange'], line:'#ED8B00', inbound:'#A55F00', outbound:'#FFAD33', name:'Orange Line', group:'orange' },
+  'Blue':   { ids:['Blue'],   line:'#003DA5', inbound:'#002674', outbound:'#2563E0', name:'Blue Line',   group:'blue' },
+  'CR': {
+    // All commuter rail routes share the purple color; we load them as a group
+    ids:['CR-Fairmount','CR-Fitchburg','CR-Worcester','CR-Franklin','CR-Greenbush','CR-Haverhill',
+         'CR-Kingston','CR-Lowell','CR-Middleborough','CR-Needham','CR-Newburyport','CR-Providence',
+         'CR-Foxboro'],
+    line:'#80276C', inbound:'#4E1542', outbound:'#C050A0', name:'Commuter Rail', group:'cr'
+  },
+};
+
+// Map routeId → line key
+const ROUTE_TO_LINE = {};
+Object.entries(LINE_CONFIG).forEach(([key, cfg]) => {
+  cfg.ids.forEach(id => { ROUTE_TO_LINE[id] = key; });
+});
+
+// Direction terminus labels (will be populated from API)
+const DIR_DEST = {
+  'Green-B':['Boston College','Government Center'],
+  'Green-C':['Cleveland Circle','Government Center'],
+  'Green-D':['Riverside','Union Square'],
+  'Green-E':['Heath Street','Medford/Tufts'],
+  'Red':    ['Ashmont/Braintree','Alewife'],
+  'Orange': ['Forest Hills','Oak Grove'],
+  'Blue':   ['Bowdoin','Wonderland'],
+  'CR':     ['various termini','South/North Station'],
+};
+
+const MBTA = 'https://api-v3.mbta.com';
+
+// ═══════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════
+const lineVisible = {};
+Object.keys(LINE_CONFIG).forEach(k => lineVisible[k] = true);
+
+let trainMarkers = {};    // vehicleId → {marker, lineKey}
+let linePolylines = {};   // lineKey → [polylines]
+let stopRegistry  = {};   // stopId → {marker, lineKeys[], name}
+let allStations   = [];
+let vehicleAlerts = {};
+
+// Alert timing (minutes)
+let alertYellow = 7;
+let alertRed    = 5;
+
+const slots = [
+  {stopId:null,stopName:null,inbound:true,outbound:true,pendingId:null,pendingName:null,open:false},
+  {stopId:null,stopName:null,inbound:true,outbound:true,pendingId:null,pendingName:null,open:false},
+  {stopId:null,stopName:null,inbound:true,outbound:true,pendingId:null,pendingName:null,open:false},
+];
+
+let sdSelectedId = null, sdSelectedName = null, sdTimer = null;
+let panelOpen = true;
+const secOpen = {lines:true, alerts:true, station:true};
+
+// ═══════════════════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════════════════
+function minsUntil(t){ return t ? Math.round((new Date(t)-Date.now())/60000) : null; }
+function fmtMin(m){ if(m==null)return'—'; if(m<=0)return'Now'; return m===1?'1 min':`${m} min`; }
+function tClass(m){ if(m==null)return''; return m<=0?'now':m<=2?'soon':''; }
+
+function dirLabel(lineKey, dir) {
+  const d = DIR_DEST[lineKey];
+  if (!d) return dir===1 ? 'Inbound' : 'Outbound';
+  return dir===0 ? `→ ${d[0]}` : `← ${d[1]}`;
+}
+
+function fillColor(lineKey, dir) {
+  const cfg = LINE_CONFIG[lineKey];
+  if (!cfg) return '#888';
+  return dir===1 ? cfg.inbound : cfg.outbound;
+}
+
+function decode(enc){
+  const pts=[];let i=0,lat=0,lng=0;
+  while(i<enc.length){
+    let b,s=0,r=0;
+    do{b=enc.charCodeAt(i++)-63;r|=(b&0x1f)<<s;s+=5;}while(b>=0x20);
+    lat+=(r&1)?~(r>>1):(r>>1);s=0;r=0;
+    do{b=enc.charCodeAt(i++)-63;r|=(b&0x1f)<<s;s+=5;}while(b>=0x20);
+    lng+=(r&1)?~(r>>1):(r>>1);
+    pts.push([lat/1e5,lng/1e5]);
+  }
+  return pts;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PANEL / SECTION TOGGLES
+// ═══════════════════════════════════════════════════════════════════
+function togglePanel(){
+  panelOpen = !panelOpen;
+  document.getElementById('panel').classList.toggle('hidden', !panelOpen);
+  document.getElementById('panelToggleBtn').classList.toggle('active', panelOpen);
+}
+
+function toggleSec(key){
+  secOpen[key] = !secOpen[key];
+  document.getElementById(`body-${key}`).classList.toggle('open', secOpen[key]);
+  document.getElementById(`chev-${key}`).classList.toggle('open', secOpen[key]);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MAP
+// ═══════════════════════════════════════════════════════════════════
+const map = L.map('map', {center:[42.356,-71.062],zoom:12,zoomControl:false});
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(map);
+L.control.zoom({position:'bottomright'}).addTo(map);
+
+// ═══════════════════════════════════════════════════════════════════
+// FETCH ROUTE DIRECTION DESTINATIONS
+// ═══════════════════════════════════════════════════════════════════
+async function fetchRouteDests(){
+  const ids = ['Green-B','Green-C','Green-D','Green-E','Red','Orange','Blue'].join(',');
+  try{
+    const d = await fetch(`${MBTA}/routes?filter[id]=${ids}&fields[route]=direction_destinations`).then(x=>x.json());
+    d.data.forEach(r=>{
+      const dests = r.attributes.direction_destinations;
+      if(dests && dests.length >= 2){
+        // Map route id to line key
+        const lk = ROUTE_TO_LINE[r.id] || r.id;
+        DIR_DEST[lk] = [dests[0], dests[1]];
+      }
+    });
+  }catch(e){console.warn('Route dests',e);}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SHAPES
+// ═══════════════════════════════════════════════════════════════════
+async function loadShapes(){
+  for(const [lk, cfg] of Object.entries(LINE_CONFIG)){
+    linePolylines[lk] = [];
+    // Fetch shape for each route ID; for Silver/CR batch them
+    const routeIds = cfg.ids.join(',');
+    try{
+      const d = await fetch(`${MBTA}/shapes?filter[route]=${routeIds}&fields[shape]=polyline`).then(x=>x.json());
+      d.data.forEach(s=>{
+        if(!s.attributes.polyline) return;
+        const pl = L.polyline(decode(s.attributes.polyline),{
+          color:cfg.line, weight: lk==='CR'?2:3.5, opacity:.75, smoothFactor:1
+        });
+        if(lineVisible[lk]) pl.addTo(map);
+        linePolylines[lk].push(pl);
+      });
+    }catch(e){console.warn('Shape',lk,e);}
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STOPS
+// ═══════════════════════════════════════════════════════════════════
+async function loadStops(){
+  // Fetch stops for each line group
+  const allRoutes = ['Green-B','Green-C','Green-D','Green-E','Red','Orange','Blue'];
+  const all = new Map(); // stopId → {s, lineKeys:[]}
+
+  for(const rid of allRoutes){
+    const lk = ROUTE_TO_LINE[rid] || rid;
+    try{
+      const d = await fetch(`${MBTA}/stops?filter[route]=${rid}&fields[stop]=name,latitude,longitude`).then(x=>x.json());
+      d.data.forEach(s=>{
+        if(!all.has(s.id)) all.set(s.id, {s, lineKeys:[]});
+        if(!all.get(s.id).lineKeys.includes(lk)) all.get(s.id).lineKeys.push(lk);
+      });
+    }catch(e){console.warn('Stop',rid,e);}
+  }
+
+  all.forEach(({s, lineKeys}, sid)=>{
+    const{latitude:lat,longitude:lng,name} = s.attributes;
+    if(!lat || !lng) return;
+    const lk = lineKeys[0];
+    const col = LINE_CONFIG[lk]?.outbound || '#aaa';
+    const sz = (lk==='CR') ? [6,6] : [8,8];
+    const icon = L.divIcon({
+      className:'',
+      html:`<div class="stop-dot" id="sdot-${sid}" style="background:${col}44;border-color:${col}"></div>`,
+      iconSize:sz, iconAnchor:[sz[0]/2,sz[1]/2]
+    });
+    const m = L.marker([lat,lng],{icon,zIndexOffset:-100});
+    if(lineKeys.some(k=>lineVisible[k])) m.addTo(map);
+
+    m.bindTooltip('',{className:'stop-tooltip',direction:'top',offset:[0,-6],sticky:false});
+    let cached=null,cacheTime=0;
+    m.on('mouseover', async()=>{
+      const tt=m.getTooltip();
+      if(!cached || Date.now()-cacheTime>30000){
+        tt.setContent(`<div class="tt-name">${name}</div><div class="tt-load">Loading…</div>`);
+        m.openTooltip();
+        cached = await buildTooltip(sid, name, lineKeys);
+        cacheTime = Date.now();
+      }
+      tt.setContent(cached); m.openTooltip();
+    });
+    m.on('mouseout', ()=>m.closeTooltip());
+    m.on('click', ()=>{
+      selectSD(sid, name);
+      if(!panelOpen) togglePanel();
+      if(!secOpen.station) toggleSec('station');
+      setTimeout(()=>document.getElementById('sec-station')?.scrollIntoView({behavior:'smooth',block:'start'}),150);
+    });
+    stopRegistry[sid] = {marker:m, lineKeys, name};
+  });
+
+  allStations = [];
+  all.forEach(({s,lineKeys},sid)=>allStations.push({id:sid,name:s.attributes.name,lineKeys}));
+  allStations.sort((a,b)=>a.name.localeCompare(b.name));
+
+  renderSlots();
+  initSDSearch();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════════════════════
+async function buildTooltip(sid, name, lineKeys){
+  // Build the route filter from all routes serving this stop
+  const routes = lineKeys.flatMap(lk=>LINE_CONFIG[lk]?.ids||[lk]).join(',');
+  try{
+    const d = await fetch(
+      `${MBTA}/predictions?filter[stop]=${sid}&filter[route]=${routes}`+
+      `&sort=arrival_time&fields[prediction]=arrival_time,departure_time,direction_id,status`+
+      `&include=route&page[limit]=16`
+    ).then(x=>x.json());
+    const byDir={0:[],1:[]};
+    (d.data||[]).forEach(p=>{
+      const dir=p.attributes.direction_id;
+      const t=p.attributes.arrival_time||p.attributes.departure_time;
+      const m=minsUntil(t);
+      const rid=p.relationships?.route?.data?.id;
+      const lk=ROUTE_TO_LINE[rid]||rid;
+      if(m!=null && m>-2 && byDir[dir].length<3) byDir[dir].push({m,lk,rid,status:p.attributes.status});
+    });
+    const primaryLk = lineKeys[0];
+    let html=`<div class="tt-name">${name}</div>`;
+    for(const dir of[1,0]){
+      html+=`<div class="tt-dir">${dirLabel(primaryLk,dir)}</div>`;
+      if(!byDir[dir].length){ html+=`<div class="tt-none">No upcoming trains</div>`; }
+      else byDir[dir].forEach(p=>{
+        const col=fillColor(p.lk, dir);
+        const ltr=(LINE_CONFIG[p.lk]?.name||p.lk).charAt(0);
+        const ts=p.status==='Boarding'?'Now':fmtMin(p.m);
+        html+=`<div class="tt-row">
+          <span class="tt-time ${tClass(p.m)}">${ts}</span>
+          <span class="tt-badge" style="color:${col};border-color:${col}">${ltr}</span>
+          ${p.status&&p.status!=='Boarding'?`<span style="color:var(--mut);font-size:9px">${p.status}</span>`:''}
+        </div>`;
+      });
+    }
+    return html;
+  }catch(e){ return`<div class="tt-name">${name}</div><div class="tt-none">Unavailable</div>`; }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// LINE TOGGLE
+// ═══════════════════════════════════════════════════════════════════
+function toggleLine(lk){
+  lineVisible[lk] = !lineVisible[lk];
+  const on = lineVisible[lk];
+  document.getElementById(`tog-${lk}`)?.classList.toggle('on', on);
+  document.getElementById(`lbl-${lk}`)?.classList.toggle('off', !on);
+  (linePolylines[lk]||[]).forEach(pl=>on?pl.addTo(map):map.removeLayer(pl));
+  Object.entries(trainMarkers).forEach(([id,{marker,lineKey}])=>{
+    if(lineKey!==lk) return;
+    on?(map.hasLayer(marker)||marker.addTo(map)):(map.hasLayer(marker)&&map.removeLayer(marker));
+  });
+  Object.entries(stopRegistry).forEach(([sid,{marker,lineKeys}])=>{
+    const show = lineKeys.some(k=>lineVisible[k]);
+    show?(map.hasLayer(marker)||marker.addTo(map)):(map.hasLayer(marker)&&map.removeLayer(marker));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ALERT TIMING
+// ═══════════════════════════════════════════════════════════════════
+function updateTiming(){
+  const y = parseInt(document.getElementById('sliderYellow').value);
+  const r = parseInt(document.getElementById('sliderRed').value);
+  // Red can't exceed yellow
+  const yClamped = Math.max(y, r+1);
+  alertYellow = yClamped;
+  alertRed    = r;
+  document.getElementById('sliderYellow').value = yClamped;
+  document.getElementById('valYellow').textContent = `≤ ${yClamped} min`;
+  document.getElementById('valRed').textContent    = `≤ ${r} min`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STATION DETAIL
+// ═══════════════════════════════════════════════════════════════════
+function initSDSearch(){
+  const inp=document.getElementById('sdSearch');
+  const drop=document.getElementById('sdDrop');
+  if(!inp)return;
+  inp.addEventListener('focus',()=>renderSDDrop(inp.value,inp,drop));
+  inp.addEventListener('input',()=>renderSDDrop(inp.value,inp,drop));
+  document.addEventListener('click',e=>{if(!inp.closest('.search-wrap').contains(e.target))drop.classList.remove('open');},{passive:true});
+}
+
+function renderSDDrop(q,inp,drop){
+  const qL=q.trim().toLowerCase();
+  const matches=qL?allStations.filter(s=>s.name.toLowerCase().includes(qL)):allStations;
+  if(!matches.length){drop.classList.remove('open');return;}
+  drop.innerHTML=matches.slice(0,40).map(s=>{
+    const bgs=s.lineKeys.map(lk=>{
+      const col=LINE_CONFIG[lk]?.outbound||'#aaa';
+      const ltr=(LINE_CONFIG[lk]?.name||lk).charAt(0);
+      return `<span class="ob" style="color:${col};border-color:${col}">${ltr}</span>`;
+    }).join('');
+    return `<div class="sopt" data-id="${s.id}" data-name="${s.name}">${bgs}<span>${s.name}</span></div>`;
+  }).join('');
+  drop.classList.add('open');
+  drop.querySelectorAll('.sopt').forEach(el=>{
+    el.addEventListener('click',()=>{
+      inp.value=el.dataset.name; drop.classList.remove('open');
+      selectSD(el.dataset.id,el.dataset.name);
+    });
+  });
+}
+
+function selectSD(sid,name){
+  sdSelectedId=sid; sdSelectedName=name;
+  document.querySelectorAll('.stop-dot.watched').forEach(el=>el.classList.remove('watched'));
+  slots.forEach(s=>{if(s.stopId){const el=document.getElementById(`sdot-${s.stopId}`);if(el)el.classList.add('watched');}});
+  document.getElementById('sdSearch').value=name;
+  const reg=stopRegistry[sid];
+  if(reg) map.panTo(reg.marker.getLatLng(),{animate:true,duration:.5});
+  loadSD(sid,name);
+}
+
+async function loadSD(sid,name){
+  const result=document.getElementById('sdResult');
+  result.innerHTML=`<div class="sd-card"><div class="sd-card-hdr"><div class="sd-card-name">${name}</div></div><div class="sd-dir-block"><div class="tt-load">Loading arrivals…</div></div></div>`;
+  if(sdTimer)clearInterval(sdTimer);
+  await renderSD(sid,name);
+  sdTimer=setInterval(()=>{if(sdSelectedId===sid)renderSD(sid,name);},15000);
+}
+
+async function renderSD(sid,name){
+  const result=document.getElementById('sdResult');
+  if(sdSelectedId!==sid)return;
+  const lks=(stopRegistry[sid]?.lineKeys)||[];
+  const primaryLk=lks[0]||'Green-B';
+  const routes=lks.flatMap(lk=>LINE_CONFIG[lk]?.ids||[lk]).join(',');
+  try{
+    const d=await fetch(
+      `${MBTA}/predictions?filter[stop]=${sid}&filter[route]=${routes}`+
+      `&sort=arrival_time&fields[prediction]=arrival_time,departure_time,direction_id,status`+
+      `&include=route&page[limit]=20`
+    ).then(x=>x.json());
+    const byDir={0:[],1:[]};
+    (d.data||[]).forEach(p=>{
+      const dir=p.attributes.direction_id;
+      const t=p.attributes.arrival_time||p.attributes.departure_time;
+      const m=minsUntil(t);
+      const rid=p.relationships?.route?.data?.id;
+      const lk=ROUTE_TO_LINE[rid]||rid;
+      if(m!=null && m>-2 && byDir[dir].length<6) byDir[dir].push({m,lk,status:p.attributes.status});
+    });
+    const badges=lks.map(lk=>{
+      const col=LINE_CONFIG[lk]?.outbound||'#aaa';
+      const ltr=(LINE_CONFIG[lk]?.name||lk).charAt(0);
+      return `<span class="sd-branch" style="color:${col};border-color:${col}">${ltr}</span>`;
+    }).join('');
+    let html=`<div class="sd-card"><div class="sd-card-hdr"><div class="sd-card-name">${name}</div><div class="sd-card-badges">${badges}</div></div>`;
+    for(const dir of[1,0]){
+      html+=`<div class="sd-dir-block"><div class="sd-dir-lbl">${dirLabel(primaryLk,dir)}</div>`;
+      if(!byDir[dir].length){html+=`<div class="sd-none">No upcoming trains</div>`;}
+      else byDir[dir].forEach(p=>{
+        const col=fillColor(p.lk,dir);
+        const ltr=(LINE_CONFIG[p.lk]?.name||p.lk).charAt(0);
+        const ts=p.status==='Boarding'?'Now':fmtMin(p.m);
+        html+=`<div class="sd-pred-row">
+          <span class="sd-time ${tClass(p.m)}">${ts}</span>
+          <span class="sd-branch" style="color:${col};border-color:${col}">${ltr}</span>
+          ${p.status&&p.status!=='Boarding'?`<span class="sd-status">${p.status}</span>`:''}
+        </div>`;
+      });
+      html+=`</div>`;
+    }
+    html+=`<div class="sd-footer"><span>Updated ${new Date().toLocaleTimeString()}</span><button class="sd-mini-refresh" onclick="renderSD('${sid}','${name.replace(/'/g,"\\'").replace(/"/g,'&quot;')}')">↻</button></div></div>`;
+    result.innerHTML=html;
+  }catch(e){
+    result.innerHTML=`<div class="sd-card"><div class="sd-dir-block"><div class="sd-none">Could not load arrivals</div></div></div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ALERT SLOTS
+// ═══════════════════════════════════════════════════════════════════
+function renderSlots(){
+  const container=document.getElementById('alertSlots');
+  if(!container)return;
+  container.innerHTML='';
+  slots.forEach((slot,i)=>{
+    const hasWatch=!!slot.stopId;
+    const div=document.createElement('div');
+    div.className='alert-slot';
+    const hdr=document.createElement('div');
+    hdr.className='slot-hdr';
+    hdr.onclick=()=>{slot.open=!slot.open;renderSlots();};
+
+    const badge=document.createElement('div');
+    badge.className='slot-badge';
+    badge.style.background=hasWatch?'#FFD700':'var(--bdr)';
+    const ac=getSlotAlertColor(i);
+    if(ac)badge.style.background=ac;
+
+    const num=document.createElement('div');num.className='slot-num';num.textContent=`#${i+1}`;
+    const lbl=document.createElement('div');
+    lbl.className='slot-lbl'+(hasWatch?'':' empty');
+    lbl.textContent=hasWatch?slot.stopName:'Tap to set…';
+    const chev=document.createElement('div');
+    chev.className='slot-chev'+(slot.open?' open':'');chev.textContent='▾';
+    hdr.append(badge,num,lbl,chev);
+    div.appendChild(hdr);
+
+    const body=document.createElement('div');
+    body.className='slot-body'+(slot.open?' open':'');
+    if(hasWatch){
+      const info=document.createElement('div');
+      info.className='slot-active-info';
+      const lks=(stopRegistry[slot.stopId]?.lineKeys)||[];
+      const pr=lks[0]||'Green-B';
+      const dirs=[];
+      if(slot.inbound) dirs.push(dirLabel(pr,1));
+      if(slot.outbound) dirs.push(dirLabel(pr,0));
+      const bgs=lks.map(lk=>{const col=LINE_CONFIG[lk]?.outbound||'#aaa';const ltr=(LINE_CONFIG[lk]?.name||lk).charAt(0);return`<span style="color:${col};border:1px solid ${col};padding:1px 4px;border-radius:3px;font-size:9px;font-weight:700;margin-right:2px;">${ltr}</span>`;}).join('');
+      info.innerHTML=`<div class="slot-info-name">${slot.stopName} ${bgs}</div><div class="slot-info-dirs">${dirs.join(' · ')||'(none)'}</div>`;
+      const clr=document.createElement('button');
+      clr.className='slot-clear';clr.textContent='✕ Clear';
+      clr.onclick=e=>{e.stopPropagation();clearSlot(i);};
+      info.appendChild(clr);
+      body.appendChild(info);
+    }
+
+    // Search
+    const sw=document.createElement('div');sw.className='search-wrap';
+    const inp=document.createElement('input');
+    inp.type='text';inp.className='sinput';inp.placeholder='Search station…';inp.autocomplete='off';
+    inp.value=slot.pendingName||'';
+    const dd=document.createElement('div');dd.className='sdrop';
+    sw.append(inp,dd);
+    inp.addEventListener('focus',()=>renderSlotDrop(i,inp,dd,inp.value));
+    inp.addEventListener('input',()=>{slot.pendingId=null;slot.pendingName=null;renderSlotDrop(i,inp,dd,inp.value);updateSetBtn(i);});
+    document.addEventListener('click',e=>{if(!sw.contains(e.target))dd.classList.remove('open');},{passive:true});
+
+    // Dir toggles with terminus names
+    const lks=(stopRegistry[slot.stopId]?.lineKeys)||(slot.pendingId?(stopRegistry[slot.pendingId]?.lineKeys||[]):[]);
+    const pr=(lks&&lks[0])||'Green-B';
+    const dr=document.createElement('div');dr.className='dir-row';
+    const bIn=document.createElement('div');
+    bIn.className='dir-btn'+(slot.inbound?' on':'');
+    bIn.textContent=dirLabel(pr,1);
+    bIn.onclick=()=>{slot.inbound=!slot.inbound;bIn.classList.toggle('on',slot.inbound);};
+    const bOut=document.createElement('div');
+    bOut.className='dir-btn'+(slot.outbound?' on':'');
+    bOut.textContent=dirLabel(pr,0);
+    bOut.onclick=()=>{slot.outbound=!slot.outbound;bOut.classList.toggle('on',slot.outbound);};
+    dr.append(bIn,bOut);
+
+    const setBtn=document.createElement('button');
+    setBtn.className='set-btn';setBtn.id=`setbtn-${i}`;
+    setBtn.textContent='Set Alert Station';
+    setBtn.disabled=!slot.pendingId;
+    setBtn.onclick=()=>applySlot(i);
+
+    body.append(sw,dr,setBtn);
+    div.appendChild(body);
+    container.appendChild(div);
+  });
+}
+
+function renderSlotDrop(si,inp,dd,q){
+  const qL=q.trim().toLowerCase();
+  const matches=qL?allStations.filter(s=>s.name.toLowerCase().includes(qL)):allStations;
+  if(!matches.length){dd.classList.remove('open');return;}
+  dd.innerHTML=matches.slice(0,40).map(s=>{
+    const bgs=s.lineKeys.map(lk=>{const col=LINE_CONFIG[lk]?.outbound||'#aaa';const ltr=(LINE_CONFIG[lk]?.name||lk).charAt(0);return`<span class="ob" style="color:${col};border-color:${col}">${ltr}</span>`;}).join('');
+    return`<div class="sopt" data-id="${s.id}" data-name="${s.name}">${bgs}<span>${s.name}</span></div>`;
+  }).join('');
+  dd.classList.add('open');
+  dd.querySelectorAll('.sopt').forEach(el=>{
+    el.addEventListener('click',()=>{
+      slots[si].pendingId=el.dataset.id;
+      slots[si].pendingName=el.dataset.name;
+      inp.value=el.dataset.name;
+      dd.classList.remove('open');
+      updateSetBtn(si);
+      // Update dir labels with terminus names from newly selected stop
+      renderSlots();
+    });
+  });
+}
+
+function updateSetBtn(i){
+  const b=document.getElementById(`setbtn-${i}`);
+  if(b)b.disabled=!slots[i].pendingId;
+}
+
+function applySlot(i){
+  if(!slots[i].pendingId)return;
+  Object.assign(slots[i],{stopId:slots[i].pendingId,stopName:slots[i].pendingName,open:false});
+  updateWatchedDots();renderSlots();fetchAll();
+}
+
+function clearSlot(i){
+  Object.assign(slots[i],{stopId:null,stopName:null,pendingId:null,pendingName:null,open:false});
+  updateWatchedDots();renderSlots();fetchAll();
+}
+
+function getSlotAlertColor(si){
+  for(const{alertClass,rows}of Object.values(vehicleAlerts)){
+    if(rows.some(r=>r.slotIdx===si))
+      return alertClass==='alert-red'?'#FF2222':alertClass==='alert-yellow'?'#FFD700':null;
+  }
+  return null;
+}
+
+function updateWatchedDots(){
+  document.querySelectorAll('.stop-dot.watched').forEach(el=>el.classList.remove('watched'));
+  slots.forEach(s=>{
+    if(!s.stopId)return;
+    const el=document.getElementById(`sdot-${s.stopId}`);
+    if(el)el.classList.add('watched');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ALERT PREDICTIONS (station-side: filter[stop])
+// ═══════════════════════════════════════════════════════════════════
+async function fetchAllWatchedPredictions(){
+  vehicleAlerts={};
+  const activeSlots=slots.filter(s=>s.stopId);
+  if(!activeSlots.length)return;
+  const temp={};
+  await Promise.all(activeSlots.map(async slot=>{
+    const si=slots.indexOf(slot);
+    const lks=(stopRegistry[slot.stopId]?.lineKeys)||[];
+    const routes=lks.flatMap(lk=>LINE_CONFIG[lk]?.ids||[lk]).join(',');
+    try{
+      const dirParam=(slot.inbound&&slot.outbound)?'':
+        slot.inbound?'&filter[direction_id]=1':'&filter[direction_id]=0';
+      const d=await fetch(
+        `${MBTA}/predictions?filter[stop]=${slot.stopId}&filter[route]=${routes}`+
+        dirParam+`&sort=arrival_time`+
+        `&fields[prediction]=arrival_time,departure_time,direction_id`+
+        `&include=vehicle&page[limit]=80`
+      ).then(x=>x.json());
+      (d.data||[]).forEach(p=>{
+        const vid=p.relationships?.vehicle?.data?.id;
+        if(!vid)return;
+        const dir=p.attributes.direction_id;
+        if(dir===1&&!slot.inbound)return;
+        if(dir===0&&!slot.outbound)return;
+        // arrival_time = station's view of when train arrives
+        const t=p.attributes.arrival_time||p.attributes.departure_time;
+        const m=minsUntil(t);
+        if(m==null||m<-1)return;
+        if(!temp[vid])temp[vid]={minMins:Infinity,rows:[]};
+        if(m<temp[vid].minMins)temp[vid].minMins=m;
+        temp[vid].rows.push({stopName:slot.stopName,mins:m,slotIdx:si});
+      });
+    }catch(e){console.warn('Watch pred',si,e);}
+  }));
+  Object.entries(temp).forEach(([vid,{minMins,rows}])=>{
+    vehicleAlerts[vid]={
+      alertClass: minMins<=alertRed?'alert-red':minMins<=alertYellow?'alert-yellow':'',
+      rows
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TRAIN ICON
+// ═══════════════════════════════════════════════════════════════════
+function trainIcon(lineKey,dir,bearing,lbl,alertClass){
+  const fill=fillColor(lineKey,dir);
+  const rot=bearing||0;
+  const borderCol=alertClass?'transparent':'rgba(255,255,255,0.25)';
+  return L.divIcon({
+    className:'',
+    html:`<div class="train-wrap ${alertClass}">
+      <div class="train-arrow" style="transform:rotate(${rot}deg);transform-origin:4px 14px;border-bottom-color:${fill}"></div>
+      <div class="train-circle" style="background:${fill};border-color:${borderCol};box-shadow:0 0 8px ${fill}88">${lbl}</div>
+    </div>`,
+    iconSize:[32,32],iconAnchor:[16,16],popupAnchor:[0,-18]
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FETCH ALL VEHICLES
+// ═══════════════════════════════════════════════════════════════════
+async function fetchAllVehicles(){
+  // Build the route list from all enabled line IDs
+  const allRouteIds = Object.values(LINE_CONFIG).flatMap(cfg=>cfg.ids);
+  // Batch in chunks of ~30 to avoid URL length issues
+  const chunks=[];
+  for(let i=0;i<allRouteIds.length;i+=25)chunks.push(allRouteIds.slice(i,i+25));
+
+  const allVehicles=[];
+  await Promise.all(chunks.map(async chunk=>{
+    try{
+      const d=await fetch(
+        `${MBTA}/vehicles?filter[route]=${chunk.join(',')}`+
+        `&fields[vehicle]=label,latitude,longitude,bearing,current_status,speed,updated_at,direction_id`+
+        `&include=route&fields[route]=short_name`
+      ).then(x=>x.json());
+      allVehicles.push(...(d.data||[]));
+    }catch(e){console.warn('Vehicles chunk',e);}
+  }));
+  return allVehicles;
+}
+
+async function fetchAll(){
+  await fetchAllWatchedPredictions();
+  try{
+    const vehicles=await fetchAllVehicles();
+    const seen=new Set();
+    vehicles.forEach(v=>{
+      const id=v.id;seen.add(id);
+      const a=v.attributes;
+      if(!a.latitude||!a.longitude)return;
+      const rid=v.relationships?.route?.data?.id||'?';
+      const lk=ROUTE_TO_LINE[rid]||rid;
+      const dir=a.direction_id;
+      const fill=fillColor(lk,dir);
+      const lbl=(a.label||id).slice(-3);
+      const speed=a.speed!=null?Math.round(a.speed*2.237)+' mph':'N/A';
+      const updated=a.updated_at?new Date(a.updated_at).toLocaleTimeString():'—';
+      const dLbl=dirLabel(lk,dir);
+      const alert=vehicleAlerts[id];
+      const alertClass=alert?.alertClass||'';
+      let watchRows='';
+      if(alert?.rows?.length){
+        alert.rows.forEach(row=>{
+          const col=alertClass==='alert-red'?'#ff5555':alertClass==='alert-yellow'?'#FFD700':'var(--accent)';
+          watchRows+=`<div class="popup-row"><span>→ ${row.stopName}</span><span style="color:${col};font-weight:600">${fmtMin(row.mins)}</span></div>`;
+        });
+      }
+      const lineName=LINE_CONFIG[lk]?.name||lk;
+      const popup=`
+        <div class="popup-title">🚃 ${lineName}</div>
+        <div class="popup-row"><span>Train</span><span>${a.label||id}</span></div>
+        <div class="popup-row"><span>Direction</span><span class="dir-badge">${dLbl}</span></div>
+        <div class="popup-row"><span>Status</span><span>${(a.current_status||'').replace(/_/g,' ').toLowerCase()}</span></div>
+        <div class="popup-row"><span>Speed</span><span>${speed}</span></div>
+        ${watchRows}
+        <div class="popup-row"><span>Updated</span><span>${updated}</span></div>`;
+
+      const icon=trainIcon(lk,dir,a.bearing,lbl,alertClass);
+      const visible=!!lineVisible[lk];
+
+      if(trainMarkers[id]){
+        trainMarkers[id].marker.setLatLng([a.latitude,a.longitude]);
+        trainMarkers[id].marker.setIcon(icon);
+        trainMarkers[id].marker.getPopup().setContent(popup);
+        if(visible&&!map.hasLayer(trainMarkers[id].marker))trainMarkers[id].marker.addTo(map);
+        if(!visible&&map.hasLayer(trainMarkers[id].marker))map.removeLayer(trainMarkers[id].marker);
+      }else{
+        const mk=L.marker([a.latitude,a.longitude],{icon,zIndexOffset:500}).bindPopup(popup);
+        if(visible)mk.addTo(map);
+        trainMarkers[id]={marker:mk,lineKey:lk};
+      }
+    });
+
+    Object.keys(trainMarkers).forEach(id=>{
+      if(!seen.has(id)){map.removeLayer(trainMarkers[id].marker);delete trainMarkers[id];}
+    });
+
+    document.getElementById('trainCount').textContent=vehicles.length;
+    document.getElementById('lastUpdated').textContent=new Date().toLocaleTimeString();
+    document.getElementById('errorMsg').style.display='none';
+    renderSlots();
+  }catch(e){
+    console.error(e);
+    document.getElementById('errorMsg').style.display='block';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════
+(async()=>{
+  document.getElementById('panelToggleBtn').classList.add('active');
+  await Promise.all([fetchRouteDests(), loadShapes(), loadStops(), fetchAll()]);
+  setInterval(fetchAll, 15000);
+})();
+</script>
+</body>
+</html>
